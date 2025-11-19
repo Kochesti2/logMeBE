@@ -16,7 +16,8 @@ app = cors(
     app,
     allow_origin=[
         "http://localhost:3000",
-        "http://192.168.1.38:3000"
+        "http://192.168.1.38:3000",
+        "http://192.168.12.158:3000"
     ]
 )
 
