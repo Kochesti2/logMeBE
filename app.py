@@ -285,10 +285,27 @@ async def create_user():
     nome = data.get("nome")
     cognome = data.get("cognome")
 
+    # Validate barcode
     if not barcode or len(barcode) != 13 or not barcode.isdigit():
         abort(400, "Barcode obbligatorio, 13 cifre numeriche")
-    if not nome or not cognome:
-        abort(400, "Nome e cognome sono obbligatori")
+    
+    # Validate and sanitize nome
+    if not nome:
+        abort(400, "Nome obbligatorio")
+    nome = nome.strip()
+    if not nome:
+        abort(400, "Nome non può essere vuoto o solo spazi")
+    if len(nome) > 255:
+        abort(400, "Nome troppo lungo (massimo 255 caratteri)")
+    
+    # Validate and sanitize cognome
+    if not cognome:
+        abort(400, "Cognome obbligatorio")
+    cognome = cognome.strip()
+    if not cognome:
+        abort(400, "Cognome non può essere vuoto o solo spazi")
+    if len(cognome) > 255:
+        abort(400, "Cognome troppo lungo (massimo 255 caratteri)")
 
     async with pool.acquire() as conn:
         try:
@@ -353,12 +370,22 @@ async def get_all_logs():
 
     if from_date:
         query += f" AND event_time >= ${idx}"
-        params.append(from_date)
+        # Parse ISO format string to datetime with error handling
+        from datetime import datetime
+        try:
+            params.append(datetime.fromisoformat(from_date))
+        except ValueError as e:
+            abort(400, f"Formato data 'from' non valido: {str(e)}")
         idx += 1
 
     if to_date:
         query += f" AND event_time <= ${idx}"
-        params.append(to_date)
+        # Parse ISO format string to datetime with error handling
+        from datetime import datetime
+        try:
+            params.append(datetime.fromisoformat(to_date))
+        except ValueError as e:
+            abort(400, f"Formato data 'to' non valido: {str(e)}")
         idx += 1
 
     query += " ORDER BY event_time DESC"
@@ -429,6 +456,11 @@ async def create_log():
 
     if not barcode:
         abort(400, "Barcode obbligatorio")
+    
+    # Case-insensitive direction validation
+    if not direction:
+        abort(400, "Direction obbligatorio")
+    direction = direction.upper()
     if direction not in ("CHECKIN", "CHECKOUT"):
         abort(400, "direction deve essere CHECKIN o CHECKOUT")
 
@@ -442,12 +474,24 @@ async def create_log():
             abort(400, "Utente non esiste per questo barcode")
 
         if event_time:
+            # Parse ISO format string to datetime with error handling
+            from datetime import datetime, timezone
+            try:
+                parsed_event_time = datetime.fromisoformat(event_time)
+            except ValueError as e:
+                abort(400, f"Formato event_time non valido: {str(e)}")
+            
+            # Validate not in future (business logic)
+            now = datetime.now(timezone.utc)
+            if parsed_event_time.replace(tzinfo=timezone.utc) > now:
+                abort(400, "event_time non può essere nel futuro")
+            
             query = """
                 INSERT INTO log (barcode, direction, event_time)
                 VALUES ($1, $2, $3)
                 RETURNING id
             """
-            log_id = await conn.fetchval(query, barcode, direction, event_time)
+            log_id = await conn.fetchval(query, barcode, direction, parsed_event_time)
         else:
             query = """
                 INSERT INTO log (barcode, direction)
