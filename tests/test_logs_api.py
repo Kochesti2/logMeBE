@@ -163,14 +163,14 @@ class TestGetLog:
 class TestCreateLog:
     """Tests for POST /logs endpoint."""
     
-    async def test_create_log_success(self, test_client, sample_user):
+    async def test_create_log_success(self, auth_client, sample_user):
         """Test creating a log with valid data."""
         log_data = {
             "barcode": sample_user["barcode"],
             "direction": "CHECKIN"
         }
         
-        response = await test_client.post("/logs", json=log_data)
+        response = await auth_client.post("/logs", json=log_data)
         
         assert response.status_code == 201
         data = response.json()
@@ -178,42 +178,42 @@ class TestCreateLog:
         assert "id" in data
         
         # Verify log was created
-        get_response = await test_client.get(f"/logs/{data['id']}")
+        get_response = await auth_client.get(f"/logs/{data['id']}")
         assert get_response.status_code == 200
     
-    async def test_create_log_missing_barcode(self, test_client):
+    async def test_create_log_missing_barcode(self, auth_client):
         """Test 400 for missing barcode."""
         log_data = {
             "direction": "CHECKIN"
         }
         
-        response = await test_client.post("/logs", json=log_data)
+        response = await auth_client.post("/logs", json=log_data)
         
         assert response.status_code == 400
     
-    async def test_create_log_invalid_direction(self, test_client, sample_user):
+    async def test_create_log_invalid_direction(self, auth_client, sample_user):
         """Test 400 for invalid direction."""
         log_data = {
             "barcode": sample_user["barcode"],
             "direction": "INVALID"
         }
         
-        response = await test_client.post("/logs", json=log_data)
+        response = await auth_client.post("/logs", json=log_data)
         
         assert response.status_code == 400
     
-    async def test_create_log_nonexistent_user(self, test_client):
+    async def test_create_log_nonexistent_user(self, auth_client):
         """Test 400 for non-existent user."""
         log_data = {
             "barcode": "9999999999999",
             "direction": "CHECKIN"
         }
         
-        response = await test_client.post("/logs", json=log_data)
+        response = await auth_client.post("/logs", json=log_data)
         
         assert response.status_code == 400
     
-    async def test_create_log_with_custom_event_time(self, test_client, sample_user):
+    async def test_create_log_with_custom_event_time(self, auth_client, sample_user):
         """Test creating a log with custom event_time."""
         from zoneinfo import ZoneInfo
         
@@ -226,13 +226,13 @@ class TestCreateLog:
             "event_time": custom_time.isoformat()
         }
         
-        response = await test_client.post("/logs", json=log_data)
+        response = await auth_client.post("/logs", json=log_data)
         
         assert response.status_code == 201
         data = response.json()
         
         # Verify the custom time was used
-        get_response = await test_client.get(f"/logs/{data['id']}")
+        get_response = await auth_client.get(f"/logs/{data['id']}")
         assert get_response.status_code == 200
         log_data_retrieved = get_response.json()
         
@@ -241,14 +241,14 @@ class TestCreateLog:
         time_diff = abs((retrieved_time.replace(tzinfo=None) - custom_time.replace(tzinfo=None)).total_seconds())
         assert time_diff < 2  # Within 2 seconds
     
-    async def test_create_log_both_directions(self, test_client, sample_user):
+    async def test_create_log_both_directions(self, auth_client, sample_user):
         """Test creating logs with both CHECKIN and CHECKOUT directions."""
         # Create CHECKIN
         checkin_data = {
             "barcode": sample_user["barcode"],
             "direction": "CHECKIN"
         }
-        response = await test_client.post("/logs", json=checkin_data)
+        response = await auth_client.post("/logs", json=checkin_data)
         assert response.status_code == 201
         
         # Create CHECKOUT
@@ -256,39 +256,39 @@ class TestCreateLog:
             "barcode": sample_user["barcode"],
             "direction": "CHECKOUT"
         }
-        response = await test_client.post("/logs", json=checkout_data)
+        response = await auth_client.post("/logs", json=checkout_data)
         assert response.status_code == 201
 
 
 class TestDeleteLog:
     """Tests for DELETE /logs/<id> endpoint."""
     
-    async def test_delete_log_success(self, test_client, sample_log):
+    async def test_delete_log_success(self, auth_client, sample_log):
         """Test deleting an existing log."""
-        response = await test_client.delete(f"/logs/{sample_log['id']}")
+        response = await auth_client.delete(f"/logs/{sample_log['id']}")
         
         assert response.status_code == 200
         data = response.json()
         assert data["message"] == "Log cancellato"
         
         # Verify log was deleted
-        get_response = await test_client.get(f"/logs/{sample_log['id']}")
+        get_response = await auth_client.get(f"/logs/{sample_log['id']}")
         assert get_response.status_code == 404
     
-    async def test_delete_log_not_found(self, test_client):
+    async def test_delete_log_not_found(self, auth_client):
         """Test 404 for non-existent log."""
-        response = await test_client.delete("/logs/99999")
+        response = await auth_client.delete("/logs/99999")
         
         assert response.status_code == 404
     
-    async def test_delete_log_user_remains(self, test_client, sample_user, sample_log):
+    async def test_delete_log_user_remains(self, auth_client, sample_user, sample_log):
         """Test that deleting a log doesn't delete the user."""
         # Delete the log
-        response = await test_client.delete(f"/logs/{sample_log['id']}")
+        response = await auth_client.delete(f"/logs/{sample_log['id']}")
         assert response.status_code == 200
         
         # Verify user still exists
-        user_response = await test_client.get(f"/users/{sample_user['barcode']}")
+        user_response = await auth_client.get(f"/users/{sample_user['barcode']}")
         assert user_response.status_code == 200
         user_data = user_response.json()
         assert user_data["barcode"] == sample_user["barcode"]

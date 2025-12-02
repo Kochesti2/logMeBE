@@ -10,7 +10,10 @@ import asyncpg
 from quart import Quart, jsonify, request, abort, websocket
 from quart_cors import cors
 
+from auth import auth_bp, auth_required
+
 app = Quart(__name__)
+app.register_blueprint(auth_bp)
 
 app = cors(
     app,
@@ -210,6 +213,7 @@ async def startup():
     global pool, listener_task, dispatcher_task
 
     pool = await asyncpg.create_pool(**DB_CONFIG)
+    app.config['db_pool'] = pool
 
     # task che ascolta LISTEN/NOTIFY
     listener_task = asyncio.create_task(listen_to_log_notifications())
@@ -278,6 +282,7 @@ async def get_user(barcode: str):
 # POST /users -> insert
 # Body JSON: { "barcode": "1234567890123", "nome": "...", "cognome": "..." }
 @app.post("/users")
+@auth_required
 async def create_user():
     data = await request.get_json(force=True)
 
@@ -326,6 +331,7 @@ async def create_user():
 
 # DELETE /users/<barcode>
 @app.delete("/users/<string:barcode>")
+@auth_required
 async def delete_user(barcode: str):
     async with pool.acquire() as conn:
         await conn.execute(
@@ -447,6 +453,7 @@ async def get_new_ean():
 # POST /logs -> insert
 # Body JSON: { "barcode": "1234567890123", "direction": "CHECKIN"/"CHECKOUT", "event_time": opzionale }
 @app.post("/logs")
+@auth_required
 async def create_log():
     data = await request.get_json(force=True)
 
@@ -505,6 +512,7 @@ async def create_log():
 
 # DELETE /logs/<id>
 @app.delete("/logs/<int:log_id>")
+@auth_required
 async def delete_log(log_id: int):
     async with pool.acquire() as conn:
         result = await conn.execute("DELETE FROM log WHERE id = $1", log_id)

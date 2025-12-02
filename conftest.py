@@ -13,6 +13,7 @@ load_dotenv(".env.test")
 
 # Import app after loading test env
 import app as app_module
+from auth import create_access_token, hash_password
 
 
 @pytest.fixture
@@ -45,7 +46,9 @@ def _setup_test_db_once():
         
         # Drop and recreate tables to ensure clean state
         await conn.execute("DROP TABLE IF EXISTS log CASCADE")
+
         await conn.execute("DROP TABLE IF EXISTS users CASCADE")
+        await conn.execute("DROP TABLE IF EXISTS managers CASCADE")
         
         # Create tables
         await conn.execute("""
@@ -63,6 +66,16 @@ def _setup_test_db_once():
                 direction VARCHAR(10) NOT NULL CHECK (direction IN ('CHECKIN', 'CHECKOUT')),
                 event_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (barcode) REFERENCES users(barcode)
+            )
+        """)
+        
+        await conn.execute("""
+            CREATE TABLE managers (
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(255) NOT NULL UNIQUE,
+                password_hash VARCHAR(255) NOT NULL,
+                active BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             )
         """)
         
@@ -88,7 +101,9 @@ async def clean_db(db_config, setup_test_db):
     """Clean database before each test."""
     conn = await asyncpg.connect(**db_config)
     await conn.execute("DELETE FROM log")
+    await conn.execute("DELETE FROM log")
     await conn.execute("DELETE FROM users")
+    await conn.execute("DELETE FROM managers")
     await conn.close()
     yield
 
@@ -104,7 +119,42 @@ async def app_with_db(db_config):
     # Cleanup
     if app_module.pool:
         await app_module.pool.close()
+        await app_module.pool.close()
         app_module.pool = None
+
+
+@pytest.fixture
+async def auth_token(db_config):
+    """Create a manager and return a valid access token."""
+    username = "test_manager"
+    password = "password123"
+    
+    conn = await asyncpg.connect(**db_config)
+    # Create active manager
+    manager_id = await conn.fetchval(
+        "INSERT INTO managers (username, password_hash, active) VALUES ($1, $2, $3) RETURNING id",
+        username, hash_password(password), True
+    )
+    await conn.close()
+    
+    return create_access_token({"sub": str(manager_id), "username": username})
+
+
+@pytest.fixture
+async def auth_headers(auth_token):
+    """Return headers with valid Bearer token."""
+    return {"Authorization": f"Bearer {auth_token}"}
+
+
+@pytest.fixture
+async def auth_client(app_with_db, auth_headers):
+    """Create test client with authentication headers."""
+    async with AsyncClient(
+        transport=ASGITransport(app=app_with_db),
+        base_url="http://test",
+        headers=auth_headers
+    ) as client:
+        yield client
 
 
 @pytest.fixture

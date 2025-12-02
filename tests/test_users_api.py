@@ -76,7 +76,7 @@ class TestGetUser:
 class TestCreateUser:
     """Tests for POST /users endpoint."""
     
-    async def test_create_user_success(self, test_client):
+    async def test_create_user_success(self, auth_client):
         """Test creating a valid user."""
         user_data = {
             "barcode": "5555555555555",
@@ -84,40 +84,40 @@ class TestCreateUser:
             "cognome": "User"
         }
         
-        response = await test_client.post("/users", json=user_data)
+        response = await auth_client.post("/users", json=user_data)
         
         assert response.status_code == 201
         data = response.json()
         assert data["message"] == "Utente creato"
         
         # Verify user was created
-        get_response = await test_client.get(f"/users/{user_data['barcode']}")
+        get_response = await auth_client.get(f"/users/{user_data['barcode']}")
         assert get_response.status_code == 200
     
-    async def test_create_user_missing_fields(self, test_client):
+    async def test_create_user_missing_fields(self, auth_client):
         """Test 400 for missing required fields."""
         # Missing nome
-        response = await test_client.post("/users", json={
+        response = await auth_client.post("/users", json={
             "barcode": "5555555555555",
             "cognome": "User"
         })
         assert response.status_code == 400
         
         # Missing cognome
-        response = await test_client.post("/users", json={
+        response = await auth_client.post("/users", json={
             "barcode": "5555555555555",
             "nome": "Test"
         })
         assert response.status_code == 400
         
         # Missing barcode
-        response = await test_client.post("/users", json={
+        response = await auth_client.post("/users", json={
             "nome": "Test",
             "cognome": "User"
         })
         assert response.status_code == 400
     
-    async def test_create_user_duplicate_barcode(self, test_client, sample_user):
+    async def test_create_user_duplicate_barcode(self, auth_client, sample_user):
         """Test 409 for duplicate barcode."""
         user_data = {
             "barcode": sample_user["barcode"],
@@ -125,14 +125,14 @@ class TestCreateUser:
             "cognome": "Name"
         }
         
-        response = await test_client.post("/users", json=user_data)
+        response = await auth_client.post("/users", json=user_data)
         
         assert response.status_code == 409
     
-    async def test_create_user_invalid_barcode(self, test_client):
+    async def test_create_user_invalid_barcode(self, auth_client):
         """Test 400 for invalid barcode format."""
         # Too short
-        response = await test_client.post("/users", json={
+        response = await auth_client.post("/users", json={
             "barcode": "123",
             "nome": "Test",
             "cognome": "User"
@@ -140,7 +140,7 @@ class TestCreateUser:
         assert response.status_code == 400
         
         # Non-numeric
-        response = await test_client.post("/users", json={
+        response = await auth_client.post("/users", json={
             "barcode": "abcdefghijklm",
             "nome": "Test",
             "cognome": "User"
@@ -151,25 +151,25 @@ class TestCreateUser:
 class TestDeleteUser:
     """Tests for DELETE /users/<barcode> endpoint."""
     
-    async def test_delete_user_success(self, test_client, sample_user):
+    async def test_delete_user_success(self, auth_client, sample_user):
         """Test deleting an existing user."""
-        response = await test_client.delete(f"/users/{sample_user['barcode']}")
+        response = await auth_client.delete(f"/users/{sample_user['barcode']}")
         
         assert response.status_code == 200
         data = response.json()
         assert data["message"] == "Utente cancellato"
         
         # Verify user was deleted
-        get_response = await test_client.get(f"/users/{sample_user['barcode']}")
+        get_response = await auth_client.get(f"/users/{sample_user['barcode']}")
         assert get_response.status_code == 404
     
-    async def test_delete_user_not_found(self, test_client):
+    async def test_delete_user_not_found(self, auth_client):
         """Test 404 for non-existent user."""
-        response = await test_client.delete("/users/9999999999999")
+        response = await auth_client.delete("/users/9999999999999")
         
         assert response.status_code == 404
     
-    async def test_delete_user_cascade_logs(self, test_client, sample_user, sample_log, db_config):
+    async def test_delete_user_cascade_logs(self, auth_client, sample_user, sample_log, db_config):
         """Test that deleting a user also deletes their logs."""
         import asyncpg
         
@@ -183,7 +183,7 @@ class TestDeleteUser:
         await conn.close()
         
         # Delete user
-        response = await test_client.delete(f"/users/{sample_user['barcode']}")
+        response = await auth_client.delete(f"/users/{sample_user['barcode']}")
         assert response.status_code == 200
         
         # Verify logs were deleted

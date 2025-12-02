@@ -22,7 +22,7 @@ class TestEdgeCases:
         assert len(data) == 0  # No results because barcode doesn't match exactly
     
     # Edge Case 2: Extremely Long String Inputs
-    async def test_extremely_long_names(self, test_client):
+    async def test_extremely_long_names(self, auth_client):
         """Test that extremely long names are rejected."""
         long_name = "A" * 1000  # 1000 characters
         
@@ -32,12 +32,12 @@ class TestEdgeCases:
             "cognome": "Rossi"
         }
         
-        response = await test_client.post("/users", json=user_data)
+        response = await auth_client.post("/users", json=user_data)
         
         assert response.status_code == 400
         assert "troppo lungo" in response.text.lower() or "massimo" in response.text.lower()
     
-    async def test_exactly_255_character_names(self, test_client):
+    async def test_exactly_255_character_names(self, auth_client):
         """Test that names at exactly 255 characters are accepted."""
         name_255 = "A" * 255
         
@@ -47,12 +47,12 @@ class TestEdgeCases:
             "cognome": "B" * 255
         }
         
-        response = await test_client.post("/users", json=user_data)
+        response = await auth_client.post("/users", json=user_data)
         
         assert response.status_code == 201
     
     # Edge Case 3: Special Characters in Names
-    async def test_special_characters_in_names(self, test_client):
+    async def test_special_characters_in_names(self, auth_client):
         """Test that special characters and unicode are handled correctly."""
         test_cases = [
             {"nome": "José", "cognome": "García"},  # Accented characters
@@ -69,7 +69,7 @@ class TestEdgeCases:
                 "cognome": names["cognome"]
             }
             
-            response = await test_client.post("/users", json=user_data)
+            response = await auth_client.post("/users", json=user_data)
             
             # Should accept all valid unicode
             assert response.status_code == 201, f"Failed for {names}"
@@ -93,7 +93,7 @@ class TestEdgeCases:
             assert "formato" in response.text.lower() or "valido" in response.text.lower() or "invalid" in response.text.lower()
     
     # Edge Case 5: Future Dates in event_time
-    async def test_future_event_time_rejected(self, test_client, sample_user):
+    async def test_future_event_time_rejected(self, auth_client, sample_user):
         """Test that future event_time values are rejected."""
         future_time = datetime.now(timezone.utc) + timedelta(days=1)
         
@@ -103,12 +103,12 @@ class TestEdgeCases:
             "event_time": future_time.isoformat()
         }
         
-        response = await test_client.post("/logs", json=log_data)
+        response = await auth_client.post("/logs", json=log_data)
         
         assert response.status_code == 400
         assert "futuro" in response.text.lower() or "future" in response.text.lower()
     
-    async def test_current_time_accepted(self, test_client, sample_user):
+    async def test_current_time_accepted(self, auth_client, sample_user):
         """Test that current time is accepted."""
         current_time = datetime.now(timezone.utc)
         
@@ -118,13 +118,13 @@ class TestEdgeCases:
             "event_time": current_time.isoformat()
         }
         
-        response = await test_client.post("/logs", json=log_data)
+        response = await auth_client.post("/logs", json=log_data)
         
         # Should be accepted (or very close to current time)
         assert response.status_code in [201, 400]  # Might fail if processed too slowly
     
     # Edge Case 6: Concurrent User Creation
-    async def test_concurrent_user_creation_race_condition(self, test_client, db_config):
+    async def test_concurrent_user_creation_race_condition(self, auth_client, db_config):
         """Test that concurrent creation of same barcode is handled correctly."""
         import asyncpg
         import asyncio
@@ -138,7 +138,7 @@ class TestEdgeCases:
         
         # Try to create the same user twice concurrently
         async def create_user():
-            return await test_client.post("/users", json=user_data)
+            return await auth_client.post("/users", json=user_data)
         
         # Execute both requests concurrently
         results = await asyncio.gather(
@@ -154,7 +154,7 @@ class TestEdgeCases:
         assert 409 in status_codes or status_codes.count(201) == 1, "Should handle duplicate"
     
     # Edge Case 7: Empty/Whitespace-Only Strings
-    async def test_empty_string_names(self, test_client):
+    async def test_empty_string_names(self, auth_client):
         """Test that empty string names are rejected."""
         user_data = {
             "barcode": "5555555555555",
@@ -162,12 +162,12 @@ class TestEdgeCases:
             "cognome": "Rossi"
         }
         
-        response = await test_client.post("/users", json=user_data)
+        response = await auth_client.post("/users", json=user_data)
         
         assert response.status_code == 400
         assert "obbligatorio" in response.text.lower() or "required" in response.text.lower()
     
-    async def test_whitespace_only_names(self, test_client):
+    async def test_whitespace_only_names(self, auth_client):
         """Test that whitespace-only names are rejected."""
         test_cases = [
             {"nome": "   ", "cognome": "Rossi"},
@@ -182,12 +182,12 @@ class TestEdgeCases:
                 **names
             }
             
-            response = await test_client.post("/users", json=user_data)
+            response = await auth_client.post("/users", json=user_data)
             
             assert response.status_code == 400
             assert "vuoto" in response.text.lower() or "spazi" in response.text.lower()
     
-    async def test_names_with_leading_trailing_whitespace(self, test_client):
+    async def test_names_with_leading_trailing_whitespace(self, auth_client):
         """Test that leading/trailing whitespace is trimmed."""
         user_data = {
             "barcode": "5555555555555",
@@ -195,30 +195,30 @@ class TestEdgeCases:
             "cognome": "  Rossi  "
         }
         
-        response = await test_client.post("/users", json=user_data)
+        response = await auth_client.post("/users", json=user_data)
         
         assert response.status_code == 201
         
         # Verify the user was created with trimmed names
-        get_response = await test_client.get("/users/5555555555555")
+        get_response = await auth_client.get("/users/5555555555555")
         assert get_response.status_code == 200
         user = get_response.json()
         assert user["nome"] == "Mario"
         assert user["cognome"] == "Rossi"
     
     # Edge Case 8: Case-Insensitive Direction Values
-    async def test_lowercase_direction_accepted(self, test_client, sample_user):
+    async def test_lowercase_direction_accepted(self, auth_client, sample_user):
         """Test that lowercase direction values are accepted."""
         log_data = {
             "barcode": sample_user["barcode"],
             "direction": "checkin"
         }
         
-        response = await test_client.post("/logs", json=log_data)
+        response = await auth_client.post("/logs", json=log_data)
         
         assert response.status_code == 201
     
-    async def test_mixed_case_direction_accepted(self, test_client, sample_user):
+    async def test_mixed_case_direction_accepted(self, auth_client, sample_user):
         """Test that mixed case direction values are accepted."""
         test_cases = ["CheckIn", "checkOut", "CHECKOUT", "ChEcKiN"]
         
@@ -228,7 +228,7 @@ class TestEdgeCases:
                 "direction": direction
             }
             
-            response = await test_client.post("/logs", json=log_data)
+            response = await auth_client.post("/logs", json=log_data)
             
             assert response.status_code == 201, f"Failed for direction: {direction}"
     
@@ -293,14 +293,14 @@ class TestEdgeCases:
         assert len(data) == 200
     
     # Bonus: Test missing direction field
-    async def test_missing_direction_field(self, test_client, sample_user):
+    async def test_missing_direction_field(self, auth_client, sample_user):
         """Test that missing direction field is properly rejected."""
         log_data = {
             "barcode": sample_user["barcode"]
             # direction is missing
         }
         
-        response = await test_client.post("/logs", json=log_data)
+        response = await auth_client.post("/logs", json=log_data)
         
         assert response.status_code == 400
         assert "direction" in response.text.lower() or "obbligatorio" in response.text.lower()
