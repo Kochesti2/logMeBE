@@ -44,7 +44,8 @@ class TestEdgeCases:
         user_data = {
             "barcode": "5555555555555",
             "nome": name_255,
-            "cognome": "B" * 255
+            "cognome": "B" * 255,
+            "email": "test@gmail.com"
         }
         
         response = await auth_client.post("/users", json=user_data)
@@ -66,7 +67,8 @@ class TestEdgeCases:
             user_data = {
                 "barcode": f"555555555{idx:04d}",
                 "nome": names["nome"],
-                "cognome": names["cognome"]
+                "cognome": names["cognome"],
+                "email": "test@gmail.com"
             }
             
             response = await auth_client.post("/users", json=user_data)
@@ -133,7 +135,8 @@ class TestEdgeCases:
         user_data = {
             "barcode": barcode,
             "nome": "Test",
-            "cognome": "User"
+            "cognome": "User",
+            "email": "test@gmail.com"
         }
         
         # Try to create the same user twice concurrently
@@ -192,7 +195,8 @@ class TestEdgeCases:
         user_data = {
             "barcode": "5555555555555",
             "nome": "  Mario  ",
-            "cognome": "  Rossi  "
+            "cognome": "  Rossi  ",
+            "email": "test@gmail.com"
         }
         
         response = await auth_client.post("/users", json=user_data)

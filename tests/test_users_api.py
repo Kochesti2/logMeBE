@@ -81,7 +81,8 @@ class TestCreateUser:
         user_data = {
             "barcode": "5555555555555",
             "nome": "Test",
-            "cognome": "User"
+            "cognome": "User",
+            "email": "test@gmail.com",
         }
         
         response = await auth_client.post("/users", json=user_data)
@@ -99,21 +100,43 @@ class TestCreateUser:
         # Missing nome
         response = await auth_client.post("/users", json={
             "barcode": "5555555555555",
-            "cognome": "User"
+            "cognome": "User",
+            "email": "test@gmail.com"
         })
         assert response.status_code == 400
         
         # Missing cognome
         response = await auth_client.post("/users", json={
             "barcode": "5555555555555",
-            "nome": "Test"
+            "nome": "Test",
+            "email": "test@gmail.com"
         })
         assert response.status_code == 400
         
         # Missing barcode
         response = await auth_client.post("/users", json={
             "nome": "Test",
+            "cognome": "User",
+            "email": "test@gmail.com"
+        })
+        assert response.status_code == 400
+
+        #missing email
+        response = await auth_client.post("/users", json={
+            "barcode": "5555555555555",
+            "nome": "Test",
             "cognome": "User"
+        })
+        assert response.status_code == 400
+
+    async def test_create_user_invalid_email(self, auth_client):
+        """Test 400 for missing required fields."""
+        # Missing nome
+        response = await auth_client.post("/users", json={
+            "barcode": "5555555555555",
+            "nome": "Test",
+            "cognome": "User",
+            "email": "testgmail.com"
         })
         assert response.status_code == 400
     
@@ -122,7 +145,8 @@ class TestCreateUser:
         user_data = {
             "barcode": sample_user["barcode"],
             "nome": "Different",
-            "cognome": "Name"
+            "cognome": "Name",
+            "email": "test@gmail.com"
         }
         
         response = await auth_client.post("/users", json=user_data)
@@ -143,7 +167,8 @@ class TestCreateUser:
         response = await auth_client.post("/users", json={
             "barcode": "abcdefghijklm",
             "nome": "Test",
-            "cognome": "User"
+            "cognome": "User",
+            "email": "test@gmail.com"
         })
         assert response.status_code == 400
 

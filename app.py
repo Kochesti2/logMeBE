@@ -5,10 +5,17 @@ from zoneinfo import ZoneInfo
 from eangenerator import genera_ean13
 from dotenv import load_dotenv
 import os
-
+import re
+from barcode import EAN13
+from barcode.writer import ImageWriter
 import asyncpg
 from quart import Quart, jsonify, request, abort, websocket
 from quart_cors import cors
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.image import MIMEImage
+from io import BytesIO
 
 from auth import auth_bp, auth_required
 
@@ -257,7 +264,7 @@ async def close_db_pool():
 async def get_all_users():
     async with pool.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT barcode, nome, cognome FROM users ORDER BY cognome, nome"
+            "SELECT barcode, nome, cognome, email FROM users ORDER BY cognome, nome"
         )
     users = [dict(r) for r in rows]
     return jsonify(users)
@@ -280,7 +287,7 @@ async def get_user(barcode: str):
 
 
 # POST /users -> insert
-# Body JSON: { "barcode": "1234567890123", "nome": "...", "cognome": "..." }
+# Body JSON: { "barcode": "1234567890123", "nome": "...", "cognome": "...", "email": "...." }
 @app.post("/users")
 @auth_required
 async def create_user():
@@ -289,6 +296,7 @@ async def create_user():
     barcode = data.get("barcode")
     nome = data.get("nome")
     cognome = data.get("cognome")
+    email = data.get("email")
 
     # Validate barcode
     if not barcode or len(barcode) != 13 or not barcode.isdigit():
@@ -312,22 +320,93 @@ async def create_user():
     if len(cognome) > 255:
         abort(400, "Cognome troppo lungo (massimo 255 caratteri)")
 
+    #Validate email
+    if not email or not re.fullmatch(r"[^@]+@[^@]+\.[^@]+", email):
+        abort(400, "Email non valido")
+
     async with pool.acquire() as conn:
         try:
             await conn.execute(
                 """
-                INSERT INTO users (barcode, nome, cognome)
-                VALUES ($1, $2, $3)
+                INSERT INTO users (barcode, nome, cognome, email)
+                VALUES ($1, $2, $3, $4)
                 """,
                 barcode,
                 nome,
                 cognome,
+                email
             )
         except asyncpg.UniqueViolationError:
             abort(409, "Utente con questo barcode già esistente")
 
+    if bool(os.getenv("SEND_EMAIL_ON_USER_REGISTER")):
+        # costruisci un oggetto che finga request.get_json()
+        class FakeRequest:
+            async def get_json(self, force=False):
+                return {"barcode": barcode, "email": email}
+
+        # monkey-patch temporaneo (solo per chiamare la funzione)
+        from quart import request as quart_request
+        quart_request._get_current_object = lambda: FakeRequest()
+
+        # chiama la funzione
+        response, status = await send_barcode()
+        if status == 500:
+            return response, status
+        return jsonify({"message": "Utente creato e barcode inviato via mail"}), 201
+
     return jsonify({"message": "Utente creato"}), 201
 
+
+@app.post("/users/send_barcode")
+@auth_required
+async def send_barcode():
+    data = await request.get_json(force=True)
+
+    barcode = data.get("barcode")
+    email = data.get("email")
+
+    # Validate barcode
+    if not barcode or len(barcode) != 13 or not barcode.isdigit():
+        abort(400, "Barcode obbligatorio, 13 cifre numeriche")
+
+    # Validate email
+    if not email or not re.fullmatch(r"[^@]+@[^@]+\.[^@]+", email):
+        abort(400, "Email non valido")
+
+    #check data in database
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT barcode, nome, cognome FROM users WHERE barcode = $1 AND email = $2",
+            barcode,
+            email
+        )
+    if not row:
+        abort(404, "Utente non trovato")
+
+    user = dict(row)
+    nome = user["nome"]
+    cognome = user["cognome"]
+
+    filename = "Barcode_"+barcode+"_"+nome+"_"+cognome+".png"
+    #crea barcode e scrivi sul disco
+    # ean = EAN13(barcode, writer=ImageWriter())
+    # filename = ean.save(filename)
+
+    # Genera barcode in memoria
+    ean = EAN13(barcode, writer=ImageWriter())
+    output = BytesIO()
+    ean.write(output)  # scrive l'immagine PNG nel buffer
+    output.seek(0)     # torna all'inizio del buffer
+
+    #manda mail
+    corpo = "Ciao "+nome+"! \n Ecco il tuo barcode. Utilizza questo barcode per fare CHECKIN e CHECKOUT.\n Team " + os.getenv("WORKING_PLACE_NAME")
+    try:
+        manda_email(email, corpo, output, filename)
+    except:
+        abort(500, "Non è stato possibile mandare l'email")
+
+    return jsonify({"message": "Barcode inviato via mail."}), 201
 
 # DELETE /users/<barcode>
 @app.delete("/users/<string:barcode>")
@@ -348,6 +427,26 @@ async def delete_user(barcode: str):
         abort(404, "Utente non trovato")
     return jsonify({"message": "Utente cancellato"})
 
+def manda_email(destinatario, corpo, output_bytes, filename):
+    # Creazione del messaggio
+    msg = MIMEMultipart()
+    msg["From"] = os.getenv("EMAIL_USERNAME")
+    msg["To"] = destinatario
+    msg["Subject"] = os.getenv("EMAIL_OGGETTO")
+
+    msg.attach(MIMEText(corpo, "plain"))
+
+    # Allegato immagine
+    image = MIMEImage(output_bytes.read(), _subtype="png")
+    image.add_header("Content-Disposition", "attachment", filename=filename)
+    msg.attach(image)
+
+    smtp_port = int(os.getenv("EMAIL_SMTP_PORT"))
+    # Connessione al server SMTP
+    with smtplib.SMTP(os.getenv("EMAIL_SMTP_SERVER"), smtp_port) as server:
+        server.starttls()          # Attiva TLS
+        server.login(os.getenv("EMAIL_USERNAME"), os.getenv("EMAIL_PASSWORD"))
+        server.send_message(msg)
 
 # ==========================
 #          LOGS

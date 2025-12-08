@@ -28,6 +28,7 @@ MarkupSafe==3.0.3
 oauthlib==3.3.1
 packaging==25.0
 passlib==1.7.4
+pillow==12.0.0
 pluggy==1.6.0
 priority==2.0.0
 pyasn1==0.6.1
@@ -36,6 +37,7 @@ PyJWT==2.8.0
 pytest==8.3.4
 pytest-asyncio==0.24.0
 pytest-cov==6.0.0
+python-barcode==0.16.1
 python-dotenv==1.2.1
 Quart==0.20.0
 quart-cors==0.8.0

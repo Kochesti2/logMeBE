@@ -55,7 +55,8 @@ def _setup_test_db_once():
             CREATE TABLE users (
                 barcode VARCHAR(13) PRIMARY KEY,
                 nome VARCHAR(255) NOT NULL,
-                cognome VARCHAR(255) NOT NULL
+                cognome VARCHAR(255) NOT NULL,
+                email VARCHAR(255)
             )
         """)
         
@@ -192,18 +193,19 @@ async def sample_user(db_config):
 async def multiple_users(db_config):
     """Create multiple sample users in the database."""
     users_data = [
-        {"barcode": "1111111111111", "nome": "Alice", "cognome": "Bianchi"},
-        {"barcode": "2222222222222", "nome": "Bob", "cognome": "Verdi"},
-        {"barcode": "3333333333333", "nome": "Charlie", "cognome": "Neri"},
+        {"barcode": "1111111111111", "nome": "Alice", "cognome": "Bianchi", "email": "Alice.Bianchi@gmail.com"},
+        {"barcode": "2222222222222", "nome": "Bob", "cognome": "Verdi", "email": "Bob.Verdi@gmail.com"},
+        {"barcode": "3333333333333", "nome": "Charlie", "cognome": "Neri", "email": "Charlie.Neri@gmail.com"},
     ]
     
     conn = await asyncpg.connect(**db_config)
     for user in users_data:
         await conn.execute(
-            "INSERT INTO users (barcode, nome, cognome) VALUES ($1, $2, $3)",
+            "INSERT INTO users (barcode, nome, cognome, email) VALUES ($1, $2, $3, $4)",
             user["barcode"],
             user["nome"],
-            user["cognome"]
+            user["cognome"],
+            user["email"]
         )
     await conn.close()
     

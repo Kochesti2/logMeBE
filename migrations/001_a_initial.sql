@@ -2,7 +2,8 @@ CREATE TABLE users (
     barcode CHAR(13) PRIMARY KEY
         CHECK (barcode ~ '^[0-9]{13}$'),
     nome    VARCHAR(100) NOT NULL,
-    cognome VARCHAR(100) NOT NULL
+    cognome VARCHAR(100) NOT NULL,
+    email VARCHAR(255)
 );
 CREATE TYPE access_direction AS ENUM ('CHECKIN', 'CHECKOUT');
 CREATE TABLE log (
